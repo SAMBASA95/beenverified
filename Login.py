@@ -6,10 +6,12 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 import re
 
 chrome_options = webdriver.ChromeOptions()
 prefs = {"profile.default_content_setting_values.notifications": 2}
+# DeprecationWarning: use options instead of chrome_options
 chrome_options.add_experimental_option("prefs", prefs)
 
 driver = webdriver.Chrome('C:\chromedriver_win32\chromedriver.exe', chrome_options=chrome_options)
@@ -51,6 +53,9 @@ list_of_links = [
 data_contact = []
 data_email = []
 data_name = []
+data_complete = []
+data_address = []
+data_social = []
 
 
 def short_time():
@@ -59,6 +64,10 @@ def short_time():
 
 def long_time():
     return random.randint(5, 11)
+
+
+def history(driver_search):
+    driver_search.execute_script("window.history.go(-1)")
 
 
 # function to check the document is loaded ?
@@ -103,28 +112,61 @@ def search(f_name, m_name, l_name, city_name, state_name, driver_search):
     time.sleep(long_time())
 
     driver_search.execute_script("window.scrollBy(0, arguments[0]);", 1000)
-    count_res = driver_search.find_elements_by_xpath("(//a[@class='panel automation-person-result-data-card'])")
+    time.sleep(short_time())
+    driver_search.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
+    count_res = driver_search.find_elements_by_xpath("(//a[@class='panel automation-person-result-data-card'])")
     if len(count_res) > 0:
         return True
     else:
         return False
 
 
-driver.find_element_by_xpath("(//h3[@class='person-name'])").click()
+def get_btn(driver_search):
+    report_len_btn = driver_search.find_elements_by_xpath("(//div[@class='card-content'])")
+    return report_len_btn
 
 
-def render_result(driver_search):
-    driver_search.execute_script("window.history.go(-1)")
-    return driver_search.find_elements_by_xpath("(//a[@class='panel automation-person-result-data-card'])")
+# View person report
 
+history(driver)
 
-search('Robert', '', 'Rohdie', '', 'CA', driver)
-render_result(driver)
-# time.sleep(10)
+counter = search('Robert', '', 'Rohdie', '', 'CA', driver)
+if counter:
+    get_btn_render = get_btn(driver)
+    for i in range(0, len(get_btn_render)):
+        get_btn_loop = get_btn(driver)
+        # actions = ActionChains(driver)
+
+        driver.execute_script("arguments[0].scrollIntoView();", get_btn_loop[i])
+
+        # actions.move_to_element(get_btn_loop[i]).perform()
+        get_btn_loop[i].click()
+        page_is_loading(driver)
+        time.sleep(short_time())
+
+        # complete code for extraction of data
+        history(driver)
+
+#  report_section__label_title automation-data-card-datapoint
 for link in list_of_links:
 
     driver.get(link)
+    # Add search person "search" function here -------------
+    counter = search('Robert', '', 'Rohdie', '', 'CA', driver)
+    if counter:
+        get_btn_render = get_btn(driver)
+        for i in range(0, len(get_btn_render)):
+            get_btn_loop = get_btn(driver)
+            actions = ActionChains(driver)
+
+            actions.move_to_element(get_btn_loop[i]).perform()
+            get_btn_loop[i].click()
+            page_is_loading(driver)
+
+            # complete code for extraction of data
+            history(driver)
+
     time.sleep(5)
     while not page_is_loading(driver):
         continue
@@ -132,9 +174,15 @@ for link in list_of_links:
     data_lead_name = driver.find_element_by_xpath("(//h1[@class='report-header__title'])").text
     driver.execute_script("window.scrollBy(0, arguments[0]);", 1000)
     data_lead = driver.find_elements_by_xpath("(//a[@class='ember-view title_link'])")
+    data_lead_complete = driver.find_elements_by_xpath("(//div[@class='report_section__data'])")
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
     individual_phone = []
     individual_email = []
+    individual_complete = []
+    individual_socials = []
+    individual_address = []
+    dummy_address = []
 
     for i in data_lead:
         if any(c.isalpha() for c in i.text):
@@ -145,15 +193,39 @@ for link in list_of_links:
             individual_phone.append(i.text)
             # print(i.text)
 
+    for j in data_lead_complete:
+        line = j.text
+        line = line.replace("\n", " ")
+        if any(c.isalpha() for c in line):
+            if 'https' in line:
+                individual_socials.append(line)
+            if 'www.' in line:
+                individual_socials.append(line)
+
+        regexp = "[0-9]{1,7} .+, [A-Z]{2} [0-9]{2,6}"
+        if re.findall(regexp, line):
+            address = re.findall(regexp, line)
+            dummy_address.append(address)
+        address = [val for sublist in dummy_address for val in sublist]
+
+        individual_address.append(address)
+        individual_complete.append(line)
+
+    data_complete.append(individual_complete)
+    data_address.append(individual_address)
+    data_social.append(individual_socials)
     data_name.append(data_lead_name)
     data_contact.append(individual_phone)
     data_email.append(individual_email)
 
 # driver.quit()
 
-dummy_tup = tuple(zip(data_name, data_contact, data_email))
+dummy_tup = tuple(zip(data_complete, data_address, data_social, data_name, data_contact, data_email))
 pre_dataFrame = pd.DataFrame(dummy_tup,
-                             columns=['data_name', 'data_contact', 'data_email'])
+                             columns=['data_complete', 'data_address', 'data_social', 'data_name', 'data_contact',
+                                      'data_email'])
 
 pre_dataFrame['data_contact'] = pre_dataFrame['data_contact'].astype(str).str.replace(r'\[|\]|', '')
 pre_dataFrame['data_email'] = pre_dataFrame['data_email'].astype(str).str.replace(r'\[|\]|', '')
+pre_dataFrame['data_address'] = pre_dataFrame['data_address'].astype(str).str.replace(r'\[|\]|', '')
+pre_dataFrame['data_social'] = pre_dataFrame['data_social'].astype(str).str.replace(r'\[|\]|', '')

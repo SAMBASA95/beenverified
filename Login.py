@@ -1,7 +1,9 @@
 import time
 import random
+import numpy as np
 from selenium.webdriver.support.ui import Select
 import pandas as pd
+from difflib import SequenceMatcher
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -42,12 +44,8 @@ driver.execute_script("window.open('');")
 time.sleep(5)
 # switch to new window with switch_to.window()
 driver.switch_to.window(driver.window_handles[1])
+driver.get("https://www.beenverified.com/app/")
 time.sleep(5)
-
-# List of urls of leads
-list_of_links = [
-    'https://www.beenverified.com/app/report/person?bvid=N_MDU0OTkyOTQ3ODY2&name=REBECCA%20S%20DUBICK&permalink=5d1deb1c31e6032448bb0442225758c8c7edbd057a085f48b698a3',
-    'https://www.beenverified.com/app/report/person?bvid=N_MDAwNjY0NzYzNzE5&permalink=a2108844a258baf40efefa305ecda9bb07241a36cd4a65129bb58c']
 
 # creating empty array
 data_contact = []
@@ -93,14 +91,20 @@ def search(f_name, m_name, l_name, city_name, state_name, driver_search):
     last_name = WebDriverWait(driver_search, 10).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='ln']")))
     city = WebDriverWait(driver_search, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='city']")))
+    # state = WebDriverWait(driver_search, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='state']")))
     state = Select(driver_search.find_element_by_name('state'))
+
+    first_name.clear()
+    m_i.clear()
+    last_name.clear()
+    city.clear()
 
     first_name.send_keys(f_name)
     m_i.send_keys(m_name)
     last_name.send_keys(l_name)
     city.send_keys(city_name)
-    if state_name == '':
-        state.select_by_value(state_name)
+    # state.send_keys(city_name)
+    state.select_by_value(state_name)
 
     search_people = WebDriverWait(driver_search, 2).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
@@ -110,10 +114,6 @@ def search(f_name, m_name, l_name, city_name, state_name, driver_search):
         continue
 
     time.sleep(long_time())
-
-    driver_search.execute_script("window.scrollBy(0, arguments[0]);", 1000)
-    time.sleep(short_time())
-    driver_search.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
     count_res = driver_search.find_elements_by_xpath("(//a[@class='panel automation-person-result-data-card'])")
     if len(count_res) > 0:
@@ -127,98 +127,120 @@ def get_btn(driver_search):
     return report_len_btn
 
 
-# View person report
+def find_seq_ratio(found_address, df_address):
+    return SequenceMatcher(None, found_address, df_address).ratio()
 
-history(driver)
 
-counter = search('Robert', '', 'Rohdie', '', 'CA', driver)
-if counter:
-    get_btn_render = get_btn(driver)
-    for i in range(0, len(get_btn_render)):
-        get_btn_loop = get_btn(driver)
-        # actions = ActionChains(driver)
+def scroll_search(driver_search):
+    total_height = int(driver_search.execute_script("return document.documentElement.scrollHeight"))
+    total_Scrolled_Height = driver_search.execute_script("return window.pageYOffset + window.innerHeight")
+    return total_height / 3
 
-        driver.execute_script("arguments[0].scrollIntoView();", get_btn_loop[i])
 
-        # actions.move_to_element(get_btn_loop[i]).perform()
-        get_btn_loop[i].click()
-        page_is_loading(driver)
+def extraction_20(drive_address):
+    while not page_is_loading(drive_address):
+        continue
+    time.sleep(short_time())
+    drive_address.execute_script("window.scrollBy(0, arguments[0]);", scroll_search(drive_address))
+
+    try:
+        data_lead_name = drive_address.find_element_by_xpath(
+            "(//div[@class='sidebar_profile__main nav__heading--desktop'])").text
+        data_lead_name = data_lead_name.replace("\n", " ")
+        data_lead = drive_address.find_elements_by_xpath("(//a[@class='ember-view title_link'])")
+        data_lead_complete = drive_address.find_elements_by_xpath("(//div[@class='report_section__data'])")
         time.sleep(short_time())
+        drive_address.execute_script("window.scrollBy(0, arguments[0]);", 6000)
 
-        # complete code for extraction of data
-        history(driver)
+        individual_phone = []
+        individual_email = []
+        individual_complete = []
+        individual_socials = []
+        individual_address = []
+        dummy_address = []
+
+        for ind in data_lead:
+            if any(c.isalpha() for c in ind.text):
+                if '@' in ind.text:
+                    individual_email.append(ind.text)
+                    # print(i.text)
+            else:
+                individual_phone.append(ind.text)
+                # print(i.text)
+
+        for j in data_lead_complete:
+            line = j.text
+            line = line.replace("\n", " ")
+            if any(c.isalpha() for c in line):
+                if 'https' in line:
+                    individual_socials.append(line)
+                if 'www.' in line:
+                    individual_socials.append(line)
+
+            regexp = "[0-9]{1,7} .+, [A-Z]{2} [0-9]{2,6}"
+            if re.findall(regexp, line):
+                address = re.findall(regexp, line)
+                dummy_address.append(address)
+            address = [val for sublist in dummy_address for val in sublist]
+
+            individual_address.append(address)
+            individual_address = list(filter(None, individual_address))
+            individual_complete.append(line)
+
+        return individual_complete, individual_address, individual_socials, data_lead_name, individual_phone, individual_email
+    except:
+        pass
+
+    # stop individual search if we find the similar property
+    # for i in address:
+    #     find_seq_ratio(i, address_to_find)
+
+
+main_df = pd.read_excel('demo2.xlsx')
+main_df = main_df.replace(np.nan, '', regex=True)
 
 #  report_section__label_title automation-data-card-datapoint
-for link in list_of_links:
-
-    driver.get(link)
+for count in range(0, len(main_df)):
     # Add search person "search" function here -------------
-    counter = search('Robert', '', 'Rohdie', '', 'CA', driver)
+    counter = search(main_df.First_Name[count], main_df.M_Name[count], main_df.Last_Name[count], main_df.City[count],
+                     main_df.State[count], driver)
+
     if counter:
         get_btn_render = get_btn(driver)
         for i in range(0, len(get_btn_render)):
-            get_btn_loop = get_btn(driver)
-            actions = ActionChains(driver)
+            time.sleep(short_time())
 
+            get_btn_loop = get_btn(driver)
+            if len(get_btn_loop) == 0:
+                search(main_df.First_Name[count], main_df.M_Name[count], main_df.Last_Name[count], main_df.City[count],
+                       main_df.State[count], driver)
+                get_btn_loop = get_btn(driver)
+
+            actions = ActionChains(driver)
             actions.move_to_element(get_btn_loop[i]).perform()
+            time.sleep(short_time())
             get_btn_loop[i].click()
-            page_is_loading(driver)
+
+            while not page_is_loading(driver):
+                continue
+
+            find_address = main_df.Address[count] + " " + main_df.City[count] + " " + main_df.State[count]
+            ind_complete, ind_address, ind_socials, ind_lead_name, ind_phone, ind_email = extraction_20(driver)
+
+            data_complete.append(ind_complete)
+            data_address.append(ind_address)
+            data_social.append(ind_socials)
+            data_name.append(ind_lead_name)
+            data_contact.append(ind_phone)
+            data_email.append(ind_email)
+
+            time.sleep(short_time())
 
             # complete code for extraction of data
             history(driver)
 
-    time.sleep(5)
-    while not page_is_loading(driver):
-        continue
-
-    data_lead_name = driver.find_element_by_xpath("(//h1[@class='report-header__title'])").text
-    driver.execute_script("window.scrollBy(0, arguments[0]);", 1000)
-    data_lead = driver.find_elements_by_xpath("(//a[@class='ember-view title_link'])")
-    data_lead_complete = driver.find_elements_by_xpath("(//div[@class='report_section__data'])")
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-    individual_phone = []
-    individual_email = []
-    individual_complete = []
-    individual_socials = []
-    individual_address = []
-    dummy_address = []
-
-    for i in data_lead:
-        if any(c.isalpha() for c in i.text):
-            if '@' in i.text:
-                individual_email.append(i.text)
-                # print(i.text)
-        else:
-            individual_phone.append(i.text)
-            # print(i.text)
-
-    for j in data_lead_complete:
-        line = j.text
-        line = line.replace("\n", " ")
-        if any(c.isalpha() for c in line):
-            if 'https' in line:
-                individual_socials.append(line)
-            if 'www.' in line:
-                individual_socials.append(line)
-
-        regexp = "[0-9]{1,7} .+, [A-Z]{2} [0-9]{2,6}"
-        if re.findall(regexp, line):
-            address = re.findall(regexp, line)
-            dummy_address.append(address)
-        address = [val for sublist in dummy_address for val in sublist]
-
-        individual_address.append(address)
-        individual_complete.append(line)
-
-    data_complete.append(individual_complete)
-    data_address.append(individual_address)
-    data_social.append(individual_socials)
-    data_name.append(data_lead_name)
-    data_contact.append(individual_phone)
-    data_email.append(individual_email)
-
 # driver.quit()
+
 
 dummy_tup = tuple(zip(data_complete, data_address, data_social, data_name, data_contact, data_email))
 pre_dataFrame = pd.DataFrame(dummy_tup,

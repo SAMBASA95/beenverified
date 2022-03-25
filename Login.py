@@ -1,8 +1,8 @@
 import time
 import random
 import numpy as np
-from selenium.webdriver.support.ui import Select
 import pandas as pd
+from selenium.webdriver.support.ui import Select
 from difflib import SequenceMatcher
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -16,7 +16,7 @@ prefs = {"profile.default_content_setting_values.notifications": 2}
 # DeprecationWarning: use options instead of chrome_options
 chrome_options.add_experimental_option("prefs", prefs)
 
-driver = webdriver.Chrome('C:\chromedriver_win32\chromedriver.exe', chrome_options=chrome_options)
+driver = webdriver.Chrome('chromedriver.exe', chrome_options=chrome_options)
 driver.maximize_window()
 
 # open the webpage
@@ -133,31 +133,44 @@ def find_seq_ratio(found_address, df_address):
 
 def scroll_search(driver_search):
     total_height = int(driver_search.execute_script("return document.documentElement.scrollHeight"))
-    total_Scrolled_Height = driver_search.execute_script("return window.pageYOffset + window.innerHeight")
-    return total_height / 3
+    total_Scrolled_Height = int(driver_search.execute_script("return window.pageYOffset + window.innerHeight"))
+    return total_height, total_Scrolled_Height
 
 
 def extraction_20(drive_address):
     while not page_is_loading(drive_address):
         continue
-    time.sleep(short_time())
-    drive_address.execute_script("window.scrollBy(0, arguments[0]);", scroll_search(drive_address))
 
+    time.sleep(short_time())
+    scr_dis, cur_dis = scroll_search(driver)
+    driver.execute_script("window.scrollBy(0, arguments[0]);", scr_dis / 2)
+    time.sleep(short_time())
+    scr_dis, cur_dis = scroll_search(driver)
+    while cur_dis < 1000:
+        driver.execute_script("window.scrollBy(0, arguments[0]);", scr_dis / 2)
+        scr_dis, cur_dis = scroll_search(driver)
+
+    individual_phone = []
+    individual_email = []
+    individual_complete = []
+    individual_socials = []
+    individual_address = []
+    dummy_address = []
+    data_lead_name = []
     try:
-        data_lead_name = drive_address.find_element_by_xpath(
-            "(//div[@class='sidebar_profile__main nav__heading--desktop'])").text
-        data_lead_name = data_lead_name.replace("\n", " ")
+        try:
+            data_lead_name = drive_address.find_element_by_xpath(
+                "(//div[@class='sidebar_profile__main nav__heading--desktop'])").text
+            data_lead_name = data_lead_name.replace("\n", " ")
+        except:
+            data_lead_name = drive_address.find_element_by_xpath(
+                "(//h1[@class='report-header__title'])").text
+            data_lead_name = data_lead_name.replace("\n", " ")
+
         data_lead = drive_address.find_elements_by_xpath("(//a[@class='ember-view title_link'])")
         data_lead_complete = drive_address.find_elements_by_xpath("(//div[@class='report_section__data'])")
         time.sleep(short_time())
         drive_address.execute_script("window.scrollBy(0, arguments[0]);", 6000)
-
-        individual_phone = []
-        individual_email = []
-        individual_complete = []
-        individual_socials = []
-        individual_address = []
-        dummy_address = []
 
         for ind in data_lead:
             if any(c.isalpha() for c in ind.text):
@@ -187,13 +200,17 @@ def extraction_20(drive_address):
             individual_address = list(filter(None, individual_address))
             individual_complete.append(line)
 
+        # stop individual search if we find the similar property
+        #   for ith_add in address:
+        #       if find_seq_ratio(ith_add, address_to_find) > 0.8;
+        #         return True
+
         return individual_complete, individual_address, individual_socials, data_lead_name, individual_phone, individual_email
+
     except:
         pass
 
-    # stop individual search if we find the similar property
-    # for i in address:
-    #     find_seq_ratio(i, address_to_find)
+    return individual_complete, individual_address, individual_socials, data_lead_name, individual_phone, individual_email
 
 
 main_df = pd.read_excel('demo2.xlsx')
@@ -239,8 +256,7 @@ for count in range(0, len(main_df)):
             # complete code for extraction of data
             history(driver)
 
-# driver.quit()
-
+driver.quit()
 
 dummy_tup = tuple(zip(data_complete, data_address, data_social, data_name, data_contact, data_email))
 pre_dataFrame = pd.DataFrame(dummy_tup,
@@ -251,3 +267,6 @@ pre_dataFrame['data_contact'] = pre_dataFrame['data_contact'].astype(str).str.re
 pre_dataFrame['data_email'] = pre_dataFrame['data_email'].astype(str).str.replace(r'\[|\]|', '')
 pre_dataFrame['data_address'] = pre_dataFrame['data_address'].astype(str).str.replace(r'\[|\]|', '')
 pre_dataFrame['data_social'] = pre_dataFrame['data_social'].astype(str).str.replace(r'\[|\]|', '')
+
+file_name = str(time.time())
+pre_dataFrame.to_excel(f'{file_name}.xlsx')

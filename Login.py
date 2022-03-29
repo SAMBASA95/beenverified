@@ -68,17 +68,6 @@ def history(driver_search):
     driver_search.execute_script("window.history.go(-1)")
 
 
-# function to check the document is loaded ?
-#  wrap , onCanvas are the id's if the page_is_loading get fails
-def page_is_loading(driver_tool):
-    while True:
-        x = driver_tool.execute_script("return document.readyState")
-        if x == "complete":
-            return True
-        else:
-            yield False
-
-
 def search(f_name, m_name, l_name, city_name, state_name, driver_search):
     search_people = driver_search.find_element_by_xpath("(//a[@id='peopleTab'])")
     search_people.click()
@@ -90,21 +79,27 @@ def search(f_name, m_name, l_name, city_name, state_name, driver_search):
     m_i = WebDriverWait(driver_search, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='mn']")))
     last_name = WebDriverWait(driver_search, 10).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='ln']")))
+
     city = WebDriverWait(driver_search, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='city']")))
+
     # state = WebDriverWait(driver_search, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='state']")))
     state = Select(driver_search.find_element_by_name('state'))
 
+    city.clear()
     first_name.clear()
     m_i.clear()
     last_name.clear()
-    city.clear()
 
     first_name.send_keys(f_name)
     m_i.send_keys(m_name)
     last_name.send_keys(l_name)
-    city.send_keys(city_name)
+
+    if city_name != '':
+        city.send_keys(city_name)
+    if state_name != '':
+        state.select_by_value(state_name)
     # state.send_keys(city_name)
-    state.select_by_value(state_name)
+    # state.select_by_value(state_name)
 
     search_people = WebDriverWait(driver_search, 2).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']")))
@@ -120,21 +115,6 @@ def search(f_name, m_name, l_name, city_name, state_name, driver_search):
         return True
     else:
         return False
-
-
-def get_btn(driver_search):
-    report_len_btn = driver_search.find_elements_by_xpath("(//div[@class='card-content'])")
-    return report_len_btn
-
-
-def find_seq_ratio(found_address, df_address):
-    return SequenceMatcher(None, found_address, df_address).ratio()
-
-
-def scroll_search(driver_search):
-    total_height = int(driver_search.execute_script("return document.documentElement.scrollHeight"))
-    total_Scrolled_Height = int(driver_search.execute_script("return window.pageYOffset + window.innerHeight"))
-    return total_height, total_Scrolled_Height
 
 
 def extraction_20(drive_address):
@@ -213,6 +193,36 @@ def extraction_20(drive_address):
     return individual_complete, individual_address, individual_socials, data_lead_name, individual_phone, individual_email
 
 
+def get_btn(driver_search):
+    report_len_btn = driver_search.find_elements_by_xpath("(//div[@class='card-content'])")
+    if len(report_len_btn) > 5:
+        return report_len_btn[0:5]
+    else:
+        return report_len_btn
+
+
+def find_seq_ratio(found_address, df_address):
+    return SequenceMatcher(None, found_address, df_address).ratio()
+
+
+def scroll_search(driver_search):
+    total_hgt = int(driver_search.execute_script("return document.documentElement.scrollHeight"))
+    total_Scrolled_Height = int(driver_search.execute_script("return window.pageYOffset + window.innerHeight"))
+    return total_hgt, total_Scrolled_Height
+
+
+# function to check the document is loaded ?
+#  wrap , onCanvas are the id's if the page_is_loading get fails
+def page_is_loading(driver_tool):
+    while True:
+        x = driver_tool.execute_script("return document.readyState")
+        t_height, c_height = scroll_search(driver_tool)
+        if x == "complete" and t_height > 1500:
+            return True
+        else:
+            yield False
+
+
 main_df = pd.read_excel('demo2.xlsx')
 main_df = main_df.replace(np.nan, '', regex=True)
 
@@ -221,41 +231,45 @@ for count in range(0, len(main_df)):
     # Add search person "search" function here -------------
     counter = search(main_df.First_Name[count], main_df.M_Name[count], main_df.Last_Name[count], main_df.City[count],
                      main_df.State[count], driver)
+    try:
+        if counter:
+            get_btn_render = get_btn(driver)
+            for i in range(0, len(get_btn_render)):
+                time.sleep(short_time())
 
-    if counter:
-        get_btn_render = get_btn(driver)
-        for i in range(0, len(get_btn_render)):
-            time.sleep(short_time())
-
-            get_btn_loop = get_btn(driver)
-            if len(get_btn_loop) == 0:
-                search(main_df.First_Name[count], main_df.M_Name[count], main_df.Last_Name[count], main_df.City[count],
-                       main_df.State[count], driver)
                 get_btn_loop = get_btn(driver)
+                if len(get_btn_loop) == 0:
+                    search(main_df.First_Name[count], main_df.M_Name[count], main_df.Last_Name[count], main_df.City[count],
+                           main_df.State[count], driver)
+                    get_btn_loop = get_btn(driver)
 
-            actions = ActionChains(driver)
-            actions.move_to_element(get_btn_loop[i]).perform()
-            time.sleep(short_time())
-            get_btn_loop[i].click()
+                actions = ActionChains(driver)
+                actions.move_to_element(get_btn_loop[i]).perform()
+                time.sleep(short_time())
+                get_btn_loop[i].click()
 
-            while not page_is_loading(driver):
-                continue
+                while not page_is_loading(driver):
+                    continue
 
-            find_address = main_df.Address[count] + " " + main_df.City[count] + " " + main_df.State[count]
-            ind_complete, ind_address, ind_socials, ind_lead_name, ind_phone, ind_email = extraction_20(driver)
+                time.sleep(short_time())
+                # print('loaded')
 
-            data_complete.append(ind_complete)
-            data_address.append(ind_address)
-            data_social.append(ind_socials)
-            data_name.append(ind_lead_name)
-            data_contact.append(ind_phone)
-            data_email.append(ind_email)
+                find_address = main_df.Address[count] + " " + main_df.City[count] + " " + main_df.State[count]
+                ind_complete, ind_address, ind_socials, ind_lead_name, ind_phone, ind_email = extraction_20(driver)
 
-            time.sleep(short_time())
+                data_complete.append(ind_complete)
+                data_address.append(ind_address)
+                data_social.append(ind_socials)
+                data_name.append(ind_lead_name)
+                data_contact.append(ind_phone)
+                data_email.append(ind_email)
 
-            # complete code for extraction of data
-            history(driver)
+                time.sleep(short_time())
 
+                # complete code for extraction of data
+                history(driver)
+    except:
+        pass
 driver.quit()
 
 dummy_tup = tuple(zip(data_complete, data_address, data_social, data_name, data_contact, data_email))
